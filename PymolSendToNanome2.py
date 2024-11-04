@@ -143,16 +143,14 @@ def make_dialog():
         label.show()
         label_logo.hide()
 
-        temp_session = tempfile.NamedTemporaryFile(suffix=".pse", delete=False)
-        cmd.save(temp_session.name)
-        print("Saved session file to", temp_session.name)
+        temp_session = PymolToMolz().export_to_molz()
 
         print("Sending current session file to Nanome")
         gif.start()
 
         sending_thread = QtCore.QThread()
         sending_worker = Worker()
-        sending_worker.session_path = temp_session.name
+        sending_worker.session_path = temp_session
         sending_worker.moveToThread(sending_thread)
         sending_thread.started.connect(sending_worker.run)
         sending_worker.finished.connect(sending_thread.quit)
@@ -348,12 +346,7 @@ class WorkspaceAPI():
             self.token = None
             return r_token
         
-        try:
-            molz_file = PymolToMolz().export_to_molz()
-        except Exception as e:
-            print(f"Error during conversion to .molz file: {e}")
-        
-        formData = {'load-in-headset': 'true', 'file': molz_file, 'format': 'molz'}
+        formData = {'load-in-headset': 'true', 'file': filepath, 'format': 'molz'}
         headers = {'Authorization': f'Bearer {self.token}'}
         result = requests.post(self.load_url, headers=headers, json=formData)
         if not result.ok:
