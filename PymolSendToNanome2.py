@@ -336,7 +336,6 @@ class WorkspaceAPI():
             return r.reason
 
     def send_file(self, filepath):
-        from datetime import datetime
         import requests
         
         if self.token is None:
