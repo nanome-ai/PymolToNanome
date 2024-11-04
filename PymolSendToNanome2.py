@@ -184,7 +184,7 @@ class WorkspaceAPI():
         self.username = username
         self.password = passw
         self.login_url = "https://api.nanome.ai/user/login"
-        self.load_url = "/load/workspace"
+        self.load_url = "https://nanome-service.dev.nanome.ai/load/workspace"
 
     def get_nanome_token(self):
         import requests
