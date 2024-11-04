@@ -18,7 +18,7 @@ def __init_plugin__(app=None):
 # global reference to avoid garbage collection of our dialog
 dialog = None
 login_dialog = None
-quickdrop = None
+workspace_api = None
 nanome_logo_path = None
 sending_thread = None
 sending_worker = None
@@ -35,7 +35,7 @@ def run_plugin_gui():
     if login_dialog is None:
         return
     
-    if quickdrop is None or quickdrop.token is None:
+    if workspace_api is None or workspace_api.token is None:
         login_dialog.show()
     else:
         dialog.show()
@@ -63,15 +63,15 @@ def make_login_dialog():
     textPass.setEchoMode(QtWidgets.QLineEdit.Password)
 
     def handle_login():
-        global quickdrop
+        global workspace_api
         if len(textPass.text()) == 0 or len(textName.text()) == 0:
             msg = "Please enter your Nanome credentials"
             QtWidgets.QMessageBox.warning(None, "Warning", msg)
             return
 
         # Get Nanome credential token here !
-        quickdrop = QuickDropAPI(textName.text(), textPass.text())
-        reason = quickdrop.get_nanome_token()
+        workspace_api = WorkspaceAPI(textName.text(), textPass.text())
+        reason = workspace_api.get_nanome_token()
 
         if reason is not None:
             msg = "Failed to login: " + reason
@@ -146,7 +146,7 @@ def make_dialog():
         cmd.save(temp_session.name)
         print("Saved session file to", temp_session.name)
 
-        print("Sending current session file to Nanome QuickDrop")
+        print("Sending current session file to Nanome")
         gif.start()
 
         sending_thread = QtCore.QThread()
@@ -173,9 +173,9 @@ class Worker(QtCore.QObject):
     finished = QtCore.pyqtSignal()
     session_path = ""
     def run(self):
-        global quickdrop
+        global workspace_api
         #Send
-        quickdrop.send_file(self.session_path)
+        workspace_api.send_file(self.session_path)
         self.finished.emit()
 
 class WorkspaceAPI():
@@ -225,3 +225,4 @@ class WorkspaceAPI():
             print(f"Could not send the session file to Nanome: {result.reason}")
             return
         print("Successfully sent the current session to Nanome !")
+        
