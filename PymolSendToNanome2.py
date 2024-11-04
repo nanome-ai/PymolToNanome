@@ -143,7 +143,11 @@ def make_dialog():
         label.show()
         label_logo.hide()
 
-        temp_session = PymolToMolz().export_to_molz()
+        try:
+            temp_session = PymolToMolz().export_to_molz()
+        except Exception as e:
+            print(f"Could not convert current session to molz file: {e}")
+            return
 
         print("Sending current session file to Nanome")
         gif.start()
