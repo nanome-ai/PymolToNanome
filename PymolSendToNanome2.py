@@ -222,7 +222,7 @@ class PymolToMolz():
         import tempfile
         structures = []
         name_map = {}
-        for mol_name in cmd.get_names('objects'):
+        for mol_name in cmd.get_names_of_type('object:molecule'):
             output_cif = tempfile.NamedTemporaryFile(
                 prefix=mol_name.replace(' ', '_')+"_",
                 suffix=".cif", delete=False, dir=assets_dir).name
@@ -312,7 +312,7 @@ class PymolToMolz():
         # Get the representation per structure
         components = []
 
-        for mol_name in cmd.get_names('objects'):
+        for mol_name in name_map:
             components.extend(
                 self.get_representations_per_structure(mol_name, name_map))
 
