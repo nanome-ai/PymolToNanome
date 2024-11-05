@@ -235,12 +235,17 @@ class PymolToMolz():
 
 
     def get_representations_per_structure(self, mol_name, name_map):
+        structure_space = {
+            'colors': [],
+            'representations': []
+        }
         components = []
-        representations = []
-        colors = []
         cmd.iterate("model " + mol_name + " and enabled",
-                    "representations.append(reps); colors.append(color)")
+                    "representations.append(reps); colors.append(color)", space=structure_space)
 
+        representations = structure_space["representations"]
+        colors = structure_space["colors"]
+        
         rep_types = set(representations)
         rep_types_s = set([j for i in rep_types for j in self.int2reps(i)])
 
@@ -322,7 +327,7 @@ class WorkspaceAPI():
         self.username = username
         self.password = passw
         self.login_url = "https://api.nanome.ai/user/login"
-        self.load_url = "https://nanome-service.dev.nanome.ai/load/workspace"
+        self.load_url = "https://workspace-service-api.nanome.ai/load/workspace"
 
     def get_nanome_token(self):
         import requests
@@ -349,9 +354,11 @@ class WorkspaceAPI():
             self.token = None
             return r_token
         
-        formData = {'load-in-headset': 'true', 'file': filepath, 'format': 'molz'}
+        formData = {'load-in-headset': 'true', 'format': 'molz'}
+        files = {'file': open(filepath, 'rb')}
         headers = {'Authorization': f'Bearer {self.token}'}
-        result = requests.post(self.load_url, headers=headers, json=formData)
+        result = requests.post(self.load_url, headers=headers, data=formData, files=files)
+        # os.remove(filepath)
         if not result.ok:
             print(f"Could not send the session file to Nanome: {result.reason}")
             return
