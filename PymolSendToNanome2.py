@@ -297,7 +297,6 @@ class PymolToMolz():
             return []
         pse_data = self._pse_molecules[mol_name]
         enabled = pse_data[2] == 1
-        print(mol_name, enabled)
         atom_data = pse_data[5][7]
         flags = pse_data[3]
         if flags:
