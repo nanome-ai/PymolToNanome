@@ -16,7 +16,7 @@ def __init_plugin__(app=None):
     Add an entry to the PyMOL "Plugin" menu
     '''
     from pymol.plugins import addmenuitemqt
-    addmenuitemqt('View in Nanome XR', run_plugin_gui)
+    addmenuitemqt('View in Nanome 2', run_plugin_gui)
 
 
 # global reference to avoid garbage collection of our dialog
@@ -252,8 +252,7 @@ class PymolToMolz():
         return [floor(color * 255) for color in c] + [255]
 
     def prepare_molz_directories(self):
-        import tempfile
-        main_dir = tempfile.TemporaryDirectory(prefix="workspaceJson_").name
+        main_dir = os.path.splitext(os.path.basename(self._pse_path))[0]
         assets_dir = os.path.join(main_dir, "assets")
         os.makedirs(assets_dir)
         return main_dir, assets_dir
