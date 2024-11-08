@@ -8,7 +8,7 @@ Pymol plugin to send the current session to Nanome 2
 
 ### Once installed, you can start the plugin
 
-Plugin → Pymol To Nanome
+Plugin → View in Nanome 2
 
 ### Usage
 
@@ -21,6 +21,9 @@ Plugin → Pymol To Nanome
 
 ![alt text](https://i.postimg.cc/pyR9KhTP/Pymol-Example-quickdrop.jpg)
 
+## Explanations
 
+This scripts exports the current session to a PSE file, extracts molecules to PDB files or SDF files (<150 atoms), also extracts molecular representations.
+Then it creates a .molz file and send it to Nanome 2 using a token retrieved via your credentials.
 
 
