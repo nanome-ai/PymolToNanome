@@ -228,24 +228,33 @@ class PymolToMolz():
                 self._pse_molecules[d[0]] = d
 
     def int2reps(self, rep):
-        reps = []
+        reps = set()
         if rep == 0:
             return reps
-        if rep & 1:
-            reps.append("ball-and-stick")
-        if rep & 2:
-            reps.append("sphere")
+        show_stick = rep & 1 != 0
+        show_sphere = rep & 2 != 0
+        nb_sphere = rep & 16 != 0
+        ignore_nb_sphere = False
+        if show_stick and show_sphere:
+            reps.add("ball-and-stick")
+            ignore_nb_sphere = True
+        elif show_stick and not show_sphere:
+            ignore_nb_sphere = True
+            reps.add("line")
+        elif not show_stick and show_sphere:
+            ignore_nb_sphere = True
+            reps.add("sphere")
         if rep & 4:
-            reps.append("surface")
+            reps.add("surface")
         if rep & 8:
-            reps.append("label")
-        if rep & 16:
-            reps.append("sphere")
+            reps.add("label")
+        if nb_sphere and not ignore_nb_sphere:
+            reps.add("sphere")
         if rep & 32:
-            reps.append("cartoon")
+            reps.add("cartoon")
         if rep & 128:
-            reps.append("line")
-        return reps
+            reps.add("wire")
+        return list(reps)
 
     def color_to_rgb(self, id):
         c = cmd.get_color_tuple(id)
