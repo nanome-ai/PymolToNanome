@@ -365,7 +365,7 @@ class PymolToMolz():
             for i, aId in enumerate(data_per_rep[rep_name]):
                 has_custom_color = False
                 if unique_setting_id[aId] >= 0:
-                    settings = self._unique_settings[unique_setting_id[aId]]
+                    settings = self._unique_settings.get(unique_setting_id[aId], [])
                     custom_col = self.get_setting_color(settings, rep_name)
                     if custom_col and custom_col >= 0:
                         cols[i] = custom_col
