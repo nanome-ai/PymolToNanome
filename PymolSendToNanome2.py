@@ -6,6 +6,7 @@ from pymol.Qt import QtCore
 from pymol import cmd
 import json
 import shutil
+from math import floor
 
 loading_gif_url = "https://upload.wikimedia.org/wikipedia/commons/b/b1/Loading_icon.gif"
 nanome_logo_url = "https://pbs.twimg.com/profile_images/988544354162651137/HQ7nVOtg_400x400.jpg"
@@ -59,7 +60,7 @@ def make_login_dialog():
     login_dialog.setWindowIcon(QtGui.QIcon(nanome_logo_path))
 
     textName = QtWidgets.QLineEdit(login_dialog)
-    textName.setPlaceholderText("Email Address")
+    textName.setPlaceholderText("Login or email address")
     textPass = QtWidgets.QLineEdit(login_dialog)
     textPass.setPlaceholderText("Password")
     textPass.setEchoMode(QtWidgets.QLineEdit.Password)
@@ -95,7 +96,6 @@ def make_login_dialog():
 def make_dialog():
     # entry point to PyMOL's API
     import tempfile
-
     import requests
     from pymol.Qt import QtGui, QtWidgets
     global nanome_logo_path
@@ -138,13 +138,17 @@ def make_dialog():
         gif.stop()
 
     def send_to_nanome():
+        import tempfile
         global sending_thread, sending_worker
         gif.start()
         label.show()
         label_logo.hide()
 
         try:
-            temp_session = PymolToMolz().export_to_molz()
+            pse_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pse", prefix="PymolWorkspace_").name
+            cmd.save(pse_file)
+            temp_session = PymolToMolz(pse_file).export_to_molz()
+            os.remove(pse_file)
         except Exception as e:
             print(f"Could not convert current session to molz file: {e}")
             return
@@ -182,7 +186,47 @@ class Worker(QtCore.QObject):
         self.finished.emit()
 
 class PymolToMolz():
-    
+
+    def __init__(self, pse_path):
+        import pickle
+        self._pse_path = pse_path
+        with open(pse_path, "rb") as f:
+            self._pse_data = pickle.loads(f.read())
+        self._unique_settings = {}
+        for i in self._pse_data["unique_settings"]:
+            self._unique_settings[i[0]] = i[1]
+
+        self._workspace_settings_colors = {
+            'surface': None,
+            'mesh': None,
+            'cartoon': None,
+            'ribbon': None,
+            'line': None,
+            'sphere': None,
+            'ball-and-stick': None,
+        }
+        
+        for setting in self._pse_data["settings"]:
+            if setting[0] == 144 and setting[2] >= 0:
+                self._workspace_settings_colors["surface"] = setting[2]
+            elif setting[0] == 236 and setting[2] >= 0:
+                self._workspace_settings_colors["cartoon"] = setting[2]
+            elif setting[0] == 235 and setting[2] >= 0:
+                self._workspace_settings_colors["ribbon"] = setting[2]
+            elif setting[0] == 526 and setting[2] >= 0:
+                self._workspace_settings_colors["line"] = setting[2]
+            elif setting[0] == 146 and setting[2] >= 0:
+                self._workspace_settings_colors["mesh"] = setting[2]
+            elif setting[0] == 173 and setting[2] >= 0:
+                self._workspace_settings_colors["sphere"] = setting[2]
+            elif setting[0] == 376 and setting[2] >= 0:
+                self._workspace_settings_colors["ball-and-stick"] = setting[2]
+        
+        self._pse_molecules = {}
+        for d in self._pse_data["names"][1:]:
+            if d[4] == 1:
+                self._pse_molecules[d[0]] = d
+
     def int2reps(self, rep):
         reps = []
         if rep == 0:
@@ -203,12 +247,9 @@ class PymolToMolz():
             reps.append("line")
         return reps
 
-
     def color_to_rgb(self, id):
-        from math import floor
         c = cmd.get_color_tuple(id)
         return [floor(color * 255) for color in c] + [255]
-
 
     def prepare_molz_directories(self):
         import tempfile
@@ -216,7 +257,6 @@ class PymolToMolz():
         assets_dir = os.path.join(main_dir, "assets")
         os.makedirs(assets_dir)
         return main_dir, assets_dir
-
 
     def save_structures(self, assets_dir):
         import tempfile
@@ -230,25 +270,86 @@ class PymolToMolz():
             basename = os.path.basename(output_cif)
             name_map[mol_name] = basename
             structures.append({"Name": mol_name, "Extension": "cif",
-                            "Identifier": name_map[mol_name]})
+                               "Identifier": name_map[mol_name]})
         return structures, name_map
 
+    def get_setting_color(self, settings, rep_name):
+        # https://github.com/schrodinger/pymol-open-source/blob/abd9579a97b9864c6a40ba7b91dd330ef64d14a5/layer1/SettingInfo.h
+        for s in settings:
+            if s[0] == 236 and rep_name == "cartoon":
+                return s[2]
+            if s[0] == 235 and rep_name == "ribbon":
+                return s[2]
+            if s[0] == 526 and rep_name == "line":
+                return s[2]
+            if s[0] == 144 and rep_name == "surface":
+                return s[2]
+            if s[0] == 146 and rep_name == "mesh":
+                return s[2]
+            if s[0] == 173 and rep_name == "ball-and-stick":
+                return s[2]
+            # stick color in bond
+            # if s[0] == 376 and "stick" in rep_name:
+            #     return s[2]
 
-    def get_representations_per_structure(self, mol_name, name_map):
-        structure_space = {
-            'colors': [],
-            'representations': []
+    def get_representations(self, mol_name, name_map):
+        if not mol_name in self._pse_molecules:
+            return []
+        pse_data = self._pse_molecules[mol_name]
+        enabled = pse_data[2] == 1
+        print(mol_name, enabled)
+        atom_data = pse_data[5][7]
+        flags = pse_data[3]
+        if flags:
+            show_stick = flags[0] == 1 or flags[4] == 1
+            show_sphere = flags[1] == 1
+            show_surface = flags[2] == 1
+            show_label = flags[3] == 1
+            show_nbSphere = flags[4] == 1
+            show_ribbon = flags[5] == 1
+            show_line = flags[7] == 1
+
+        complex_settings = pse_data[5][0][8]
+        complex_custom_colors = {
+            'surface': None,
+            'mesh': None,
+            'cartoon': None,
+            'ribbon': None,
+            'line': None,
+            'sphere': None,
+            'ball-and-stick': None,
         }
-        components = []
-        cmd.iterate("model " + mol_name + " and enabled",
-                    "representations.append(reps); colors.append(color)", space=structure_space)
+        if complex_settings:
+            for setting in complex_settings:
+                # if setting[0] == 138 and setting[2] >= 0:
+                # complex_custom_colors["surface_transparency"] = setting[2]
+                if setting[0] == 144 and setting[2] >= 0:
+                    complex_custom_colors["surface"] = setting[2]
+                elif setting[0] == 236 and setting[2] >= 0:
+                    complex_custom_colors["cartoon"] = setting[2]
+                elif setting[0] == 235 and setting[2] >= 0:
+                    complex_custom_colors["ribbon"] = setting[2]
+                elif setting[0] == 526 and setting[2] >= 0:
+                    complex_custom_colors["line"] = setting[2]
+                elif setting[0] == 146 and setting[2] >= 0:
+                    complex_custom_colors["mesh"] = setting[2]
+                elif setting[0] == 173 and setting[2] >= 0:
+                    complex_custom_colors["sphere"] = setting[2]
+                elif setting[0] == 376 and setting[2] >= 0:
+                    complex_custom_colors["ball-and-stick"] = setting[2]
 
-        representations = structure_space["representations"]
-        colors = structure_space["colors"]
-        
+        colors = []
+        unique_setting_id = []
+        ribbon_mode = []
+        representations = []
+        for a in atom_data:
+            ribbon_mode.append(a[23])
+            colors.append(a[21])
+            unique_setting_id.append(a[32] if a[40] != 0 else -1)
+            representations.append(a[20])
+
         rep_types = set(representations)
         rep_types_s = set([j for i in rep_types for j in self.int2reps(i)])
-
         data_per_rep = {}
         for r in rep_types_s:
             data_per_rep[r] = []
@@ -257,12 +358,33 @@ class PymolToMolz():
             for rs in self.int2reps(r):
                 data_per_rep[rs].append(i)
 
-        for i in data_per_rep:
-            cols = [colors[c] for c in data_per_rep[i]]
-            color_set = list(set(cols))
+        components = []
 
+        for rep_name in data_per_rep:
+            cols = [colors[c] for c in data_per_rep[rep_name]]
+
+            # Use unique settings
+            for i, aId in enumerate(data_per_rep[rep_name]):
+                has_custom_color = False
+                if unique_setting_id[aId] >= 0:
+                    settings = self._unique_settings[unique_setting_id[aId]]
+                    custom_col = self.get_setting_color(settings, rep_name)
+                    if custom_col and custom_col >= 0:
+                        cols[i] = custom_col
+                        has_custom_color = True
+                
+                # Try to use complex setting
+                if not has_custom_color and rep_name in complex_custom_colors and complex_custom_colors[rep_name]:
+                    cols[i] = complex_custom_colors[rep_name]
+                    has_custom_color = True
+                
+                # Try to use workspace setting
+                if not has_custom_color and rep_name in self._workspace_settings_colors and self._workspace_settings_colors[rep_name]:
+                    cols[i] = self._workspace_settings_colors[rep_name]
+
+            color_set = list(set(cols))
             rep = {
-                "Kind": i,
+                "Kind": rep_name.replace("sphere", "spacefill"),
                 "ColorScheme": {
                     "Library": [self.color_to_rgb(c) for c in color_set],
                     "Colors": [color_set.index(c) for c in cols],
@@ -276,23 +398,22 @@ class PymolToMolz():
             }
             component = {
                 "Structure": name_map[mol_name],
-                "Name": i[0].upper() + i[1:].lower(),
+                "Name": rep_name[0].upper() + rep_name[1:].lower(),
                 "Model": 0,
-                "Selection": data_per_rep[i],
-                "Representations": [rep]
+                "Selection": data_per_rep[rep_name],
+                "Representations": [rep],
+                "Hidden": not enabled
             }
             components.append(component)
         return components
 
-
     def create_state_file(self, main_dir, structures, components):
         state = {"Version": "0.0.1",
-                "Structures": structures,
-                "Components": components
-                }
+                 "Structures": structures,
+                 "Components": components
+                 }
         with open(os.path.join(main_dir, "state.json"), "w") as f:
             json.dump(state, f)
-
 
     def create_molz_archive(self, main_dir):
         final_path = main_dir + ".molz"
@@ -300,7 +421,6 @@ class PymolToMolz():
         shutil.rmtree(main_dir)
         os.rename(main_dir + ".zip", final_path)
         return final_path
-
 
     def export_to_molz(self):
         # Remove atoms that are added by Pymol for missing residues
@@ -314,11 +434,10 @@ class PymolToMolz():
 
         for mol_name in name_map:
             components.extend(
-                self.get_representations_per_structure(mol_name, name_map))
+                self.get_representations(mol_name, name_map))
 
         self.create_state_file(main_dir, structures, components)
         molz_path = self.create_molz_archive(main_dir)
-        print(f"Created molz workspace file: {molz_path}")
         return molz_path
 
 class WorkspaceAPI():
@@ -354,13 +473,15 @@ class WorkspaceAPI():
             self.token = None
             return r_token
         
-        formData = {'load-in-headset': 'true', 'format': 'molz'}
-        files = {'file': open(filepath, 'rb')}
+        formData = {'load-in-headset': True, 'format': 'molz'}
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        files = {os.path.splitext(os.path.basename(filepath))[0]: data}
         headers = {'Authorization': f'Bearer {self.token}'}
         result = requests.post(self.load_url, headers=headers, data=formData, files=files)
-        # os.remove(filepath)
         if not result.ok:
             print(f"Could not send the session file to Nanome: {result.reason}")
-            return
-        print("Successfully sent the current session to Nanome !")
+        else:
+            print("Successfully sent the current session to Nanome !")
+        os.remove(filepath)
         
